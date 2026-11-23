@@ -45,14 +45,19 @@ int main(void){
 
   controls.loadOff(lcd);
 
+#ifndef HEADLESS    //headless build has no LCD: no welcome screen to wait for
   displayWelcomeScreen(lcd);
   delay(2000);
   displayMenu(lcd);
+#endif
 
-#ifdef SIM_TEST     //simulation build: skip the keypad menu, go straight to the serial remote mode
+#if defined(HEADLESS_APP)    //headless build for the desktop app: battery-mode serial protocol (o, a<A>, c<V>, r + "m;..." telemetry)
+  for(;;)
+    batteryCapacityMode(lcd, userInput, keypad, encoder, measurements, controls, battery);
+#elif defined(SIM_TEST) || defined(HEADLESS)     //simulation / headless build: skip the keypad menu, go straight to the serial remote mode
   Serial.println("READY");
   for(;;)
-    remoteMode(lcd, userInput, keypad, measurements, controls);
+    remoteMode(lcd, userInput, keypad, encoder, measurements, controls);
 #endif
 
   for (;;) {  //void loop() equivalent
@@ -78,7 +83,7 @@ int main(void){
         displayMenu(lcd);
 				break;
 			case '6':
-				remoteMode(lcd, userInput, keypad, measurements, controls);
+				remoteMode(lcd, userInput, keypad, encoder, measurements, controls);
         displayMenu(lcd);
 				break;
 			// case '7':

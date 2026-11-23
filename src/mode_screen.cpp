@@ -163,6 +163,11 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 	float prevCapacity = 0;
 	uint32_t prevTime = 0;
 	char data;
+	userInput.cursorPosX = 3;
+	userInput.decimalPlace = ones;
+	battery.changedVariable = DischargeCurrent;
+
+#ifndef HEADLESS	//headless build: no keypad, the cutoff voltage stays 0 V (no automatic cutoff) until the PC sets it ('c')
 	lcd.clear();
 	lcd.setCursor(0, 0);
 	lcd.print("  Battery capacity  ");
@@ -170,15 +175,12 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 	lcd.print("  measurement mode  ");
 	lcd.setCursor(0, 2);
   lcd.print("Enter cutoff voltage");
-	userInput.cursorPosX = 3;
-	userInput.decimalPlace = ones;
-	battery.changedVariable = DischargeCurrent;
 
 	do{
 		userInput.key = keypad.getKey();
 		userInput.inputFromKeypad(lcd, battery.cutoffVoltage, 14, 2);
 	} while (userInput.key != Enter);
-  
+
 	lcd.clear();
   lcd.setCursor(0, 2);
   lcd.print("I=");
@@ -186,6 +188,7 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 	lcd.print("A  Off=");
 	battery.cutoffVoltage.display(lcd);
 	lcd.print("V");
+#endif
 
 	controls.loadOff(lcd);
 	controls.regulateCurrent(battery.dischargeCurrent.value);
@@ -232,6 +235,15 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 		}
 
 		measurements.update();
+
+#ifdef HEADLESS
+		//no keypad / LCD: safety switches and continuous regulation (so that MAX_POWER follows the input voltage)
+		if((encoder.wasButtonPressed() || measurements.voltage > MAX_VOLTAGE + 1) && controls.isLoadOn()){
+			controls.loadOff(lcd);
+			measurements.timer.stop();
+		}
+		controls.regulateCurrent(battery.dischargeCurrent.value);
+#endif
 
 		sendLoadStatisticsOverSerial(measurements, battery, controls.isLoadOn());
 

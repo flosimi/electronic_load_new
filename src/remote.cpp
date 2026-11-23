@@ -116,6 +116,10 @@ bool execute(char* command, LiquidCrystal_I2C& lcd, UserInput& userInput, Measur
 		sendMeasurements(userInput, measurements, controls);
 		return false;
 	}
+	else if(!strcmp(command, "HELP")){
+		Serial.println("CC <A> | CP <W> | CR <ohm> | ON | OFF | MEAS? | HELP | EXIT");
+		return false;
+	}
 	else if(!strcmp(command, "EXIT")){
 		controls.loadOff(lcd);
 		Serial.println("OK");
@@ -135,8 +139,10 @@ bool execute(char* command, LiquidCrystal_I2C& lcd, UserInput& userInput, Measur
 	SetValue& value = setpoint(userInput);
 	value.value = atof(argument);
 	value.limit();
+#ifndef HEADLESS
 	showHeader(lcd, controls);
 	showSetpoint(lcd, userInput);
+#endif
 	Serial.print("OK ");
 	Serial.print(modeName());
 	Serial.print(" ");
@@ -173,25 +179,36 @@ bool pollSerial(LiquidCrystal_I2C& lcd, UserInput& userInput, Measurements& meas
 
 } //namespace
 
-int remoteMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Measurements& measurements, Controls& controls){
+int remoteMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Encoder& encoder, Measurements& measurements, Controls& controls){
 	length = 0;
 	overflow = false;
 	mode = ConstCurrent;
 	controls.loadOff(lcd);
 
+#ifndef HEADLESS
 	lcd.clear();
 	showHeader(lcd, controls);
 	showSetpoint(lcd, userInput);
 	lcd.setCursor(0, 3);
 	lcd.print("Menu = exit");
+#endif
 
 	while(Serial.available() > 0)	//drop old data
 		Serial.read();
 
+	encoder.reset();
+
 	while(1){
 		measurements.update();
+#ifndef HEADLESS
 		measurements.displayMeasurements(lcd, controls.isLoadOn());
+#endif
 		controls.fanControll();
+
+		if(encoder.wasButtonPressed() && controls.isLoadOn()){	//physical safety switch
+			controls.loadOff(lcd);
+			Serial.println("OFF");
+		}
 
 		if(controls.isLoadOn() && measurements.voltage > MAX_VOLTAGE + 1){	//input voltage above the rating
 			controls.loadOff(lcd);
@@ -207,6 +224,7 @@ int remoteMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Mea
 		if(pollSerial(lcd, userInput, measurements, controls))
 			return 0;
 
+#ifndef HEADLESS
 		switch(keypad.getKey()){
 			case Menu:
 				controls.loadOff(lcd);
@@ -217,5 +235,6 @@ int remoteMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Mea
 			default:
 				break;
 		}
+#endif
 	}
 }
