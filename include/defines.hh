@@ -22,6 +22,17 @@
 static_assert(MAX_CURRENT * CURRENT_SHUNT_OHM < ADC_CURRENT_FULL_SCALE, "Shunt voltage at MAX_CURRENT exceeds ADC range");
 static_assert(MAX_CURRENT * DAC_VOLTS_PER_AMP < DAC_VREF, "DAC can't reach MAX_CURRENT");
 
+//protection limits (see Measurements::fault)
+#define MAX_TEMPERATURE 85          //above this [deg C] the load is switched off
+#define THERMISTOR_ADC_MIN 10       //analogRead() outside [MIN, MAX] = thermistor open / shorted
+#define THERMISTOR_ADC_MAX 1013
+#define OVERVOLTAGE_TRIP (MAX_VOLTAGE + 0.5)  //[V] the voltage ADC saturates at ~51.2 V, so the trip point must stay below that
+#define ADC_TIMEOUT_MS 30           //a single ADS1115 conversion takes ~1 ms; longer = the chip doesn't answer
+
+#ifndef I2C_CLOCK_HZ
+#define I2C_CLOCK_HZ 400000         //set -DI2C_CLOCK_HZ=100000 if the LCD shows garbage / I2C errors appear
+#endif
+
 #define ADC_ADDRESS 0x48
 #define DAC_ADDRESS 0x60
 #define LCD_ADDRESS 0x27

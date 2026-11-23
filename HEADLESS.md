@@ -38,7 +38,8 @@ Comandă de build pentru toate: `pio run`
    - `CP <W>` → putere constantă, `CR <ohm>` → rezistență constantă
    - `ON` / `OFF`
 5. Verificare: la `CC 0.5` + `ON`, ampermetrul extern arată ~0.5 A și `MEAS?` arată ~0.5 A.
-6. Verificare siguranță: cu sarcina ON, apasă butonul encoderului → sarcina se oprește (`OFF`).
+6. Verificare siguranță: cu sarcina ON, apasă butonul encoderului → sarcina se oprește și apare `!OFF ENCODER`.
+7. Liniile care încep cu `!` nu sunt răspunsuri la o comandă: `!OFF ENCODER` și `!FAULT <mască>` (vezi secțiunea 5).
 
 ## 4. Test cu aplicația desktop (`headless-app`)
 1. Fișier: `desktop_app/release/windows-64bit/electronic_load_control_app.exe`
@@ -47,15 +48,25 @@ Comandă de build pentru toate: `pio run`
 4. Verifică: tensiune, curent, temperatură și grafic se actualizează.
 5. Tensiunea de oprire (`cutoff`) este 0 V la pornire = nu se oprește singur. O poți seta din aplicație.
 6. Aplicația setează doar curent constant (nu are CP/CR).
-7. Dacă vrei să vezi datele brute: `pio device monitor -b 9600` arată linii `m;mV;mA;temp;cutoff;curentSetat;on;timp;CRC`. Comenzi manuale: `o` (ON/OFF), `a0.5` + Enter (curent), `c3.0` + Enter (cutoff), `r` (reset).
+7. Dacă vrei să vezi datele brute: `pio device monitor -b 9600` arată (de 5 ori pe secundă) linii `m;mV;mA;temp;cutoff;curentSetat;on;timp;CRC`. Comenzi manuale:
+   - `o` → comută ON/OFF; `N` → ON; `F` → OFF (majuscule, idempotente)
+   - `a0.5` + Enter → curent; `c3.0` + Enter → tensiune de oprire; `r` + Enter → reset capacitate
+   - Comenzile cu valoare se aplică **doar după newline**; fără newline în 1 s sunt ignorate.
+8. La o eroare apare o linie `!FAULT <mască>`; aplicația o ignoră, dar sarcina se oprește.
+9. Capacitatea (mAh) se calculează acum prin integrare pe pași; timpul afișat vine tot din RTC și se resetează la 24 h.
 
 ## 5. Ce trebuie să observ
 - [ ] La 0.5 A setat, ampermetrul arată ~0.5 A (nu ~4 A cum era înainte)
 - [ ] Curentul se schimbă când schimb valoarea setată
 - [ ] Tensiunea măsurată corespunde cu voltmetrul extern
 - [ ] Butonul encoderului oprește sarcina
-- [ ] Peste 50 V (limita + 1 V) sarcina se oprește singură
-- [ ] La 400 W urmăresc temperatura (ventilatorul pornește de la 30 °C, la 45 °C merge la turație maximă). **Nu există oprire automată la supraîncălzire.**
+- [ ] Peste 50.5 V sarcina se oprește singură (`!FAULT 8`) și `ON` e refuzat până scade tensiunea
+- [ ] Cu termistorul deconectat: ventilatorul pornește la maxim, sarcina nu pornește, `!FAULT 2`
+- [ ] Peste 85 °C sarcina se oprește (`!FAULT 4`). Ventilatorul pornește de la 30 °C, la 45 °C merge la turație maximă.
+- [ ] Dacă ADS1115 nu răspunde (cablu I2C scos): `!FAULT 1`, sarcina se oprește (înainte firmware-ul rămânea blocat)
+- [ ] Dacă LCD-ul (varianta completă) arată caractere corupte sau apar `FAULT 1` sporadice, compilează cu `-DI2C_CLOCK_HZ=100000`
+
+Măștile `!FAULT`: 1 = ADC nu răspunde, 2 = termistor, 4 = supratemperatură, 8 = supratensiune (se adună).
 
 ## 6. Dacă uploadul nu merge (ICSP / USBasp)
 Firmware-ul nu poate ține micro-ul în reset; cauza e la hardware sau programator.
@@ -71,7 +82,10 @@ Firmware-ul nu poate ține micro-ul în reset; cauza e la hardware sau programat
 - Nu există mod cu tensiune constantă; tensiunea se citește, nu se setează.
 - Dacă se pierde conexiunea USB cu sarcina ON, sarcina rămâne pornită. Oprire: comanda `OFF`, din aplicație, sau butonul encoderului.
 - Calibrarea de pe panou este dezactivată (flash). EEPROM-ul gol folosește valori neutre.
-- Varianta completă (`nanoatmega328`) este la 99.8% din flash, aproape plină.
+- Varianta completă (`nanoatmega328`) este la ~98.8% din flash. Dependențele sunt fixate la versiunile instalate.
+- Nu există watchdog: dacă firmware-ul se blochează din alt motiv, sarcina rămâne pornită.
+- Protecția la supratensiune presupune că ADC-ul de tensiune se saturează la ~51.2 V; dacă firele de sense sunt deconectate, tensiunea citită e ~0 și limita de 400 W nu mai funcționează (de verificat în schemă).
+- În varianta cu LCD, după o oprire prin eroare ecranul poate afișa încă „ON” până reintri în mod.
 
 ## 8. Git
 - Branch-ul vechi, neatins: `main`. Revenire: `git switch main`

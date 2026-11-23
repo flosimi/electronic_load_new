@@ -3,15 +3,21 @@
 Encoder * Encoder::instance;
 
 void Encoder::begin(){
+  instance = this;                         //before the interrupts are attached: the ISRs dereference it
+  pinMode(ENCODER_A, INPUT_PULLUP);        //pull-ups first, so floating pins don't generate edges
+  pinMode(ENCODER_B, INPUT_PULLUP);
+  pinMode(ENCODER_BUTTON, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENCODER_A), isrRotation, FALLING);
   attachInterrupt(digitalPinToInterrupt(ENCODER_BUTTON), isrButton, FALLING);
-  instance = this;
 }
 
 
 void Encoder::reset(){
+  uint8_t sreg = SREG;                     //counter is 16 bit: the ISR must not run in the middle of the access
+  cli();
   counter = 0;
   buttonPressed = false;
+  SREG = sreg;
 }
 
 void Encoder::isrRotation(){
@@ -50,14 +56,27 @@ void Encoder::handleInterruptButton(){
 
 
 bool Encoder::wasButtonPressed(){
-  if(buttonPressed){
-    buttonPressed = false; //reset buttonPressed flag
-    return true;
-  }
-  else
-    return false;
+  uint8_t sreg = SREG;                     //read and clear atomically, a press arriving in between would be lost
+  cli();
+  bool pressed = buttonPressed;
+  buttonPressed = false;                   //reset buttonPressed flag
+  SREG = sreg;
+  return pressed;
+}
+
+int Encoder::takeRotation(){               //read and clear the rotation counter atomically (no lost steps)
+  uint8_t sreg = SREG;
+  cli();
+  int value = counter;
+  counter = 0;
+  SREG = sreg;
+  return value;
 }
 
 int Encoder::rotation(){
-  return counter;
+  uint8_t sreg = SREG;
+  cli();
+  int value = counter;
+  SREG = sreg;
+  return value;
 }

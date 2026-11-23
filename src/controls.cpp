@@ -8,7 +8,7 @@ Controls::Controls(Measurements& measurements_): measurements(measurements_){
 
 
 void Controls::fanControll(){
-	fanspeed = map(measurements.temperature, lowTemperatureThreshold, 45, 60, 255);
+	fanspeed = map(measurements.temperature, lowTemperatureThreshold, highTemperatureThreshold, 60, 255);
 	//hysteresis, so that fans don't turn on/off repeatedly when crossing the threshold
   if (measurements.temperature < lowTemperatureThreshold){
     fanspeed = 0;
@@ -18,13 +18,15 @@ void Controls::fanControll(){
      lowTemperatureThreshold=30;
 
   //if it's hot drive fans at full speed
-  if (measurements.temperature > 45){
+  if (measurements.temperature > highTemperatureThreshold){
     fanspeed = 255;
 	}
 	analogWrite(FAN, fanspeed);
 }
 
 void Controls::loadOn(LiquidCrystal_I2C& lcd){
+	if(measurements.fault)	//sensor failure / over-voltage / over-temperature: refuse to switch the load on
+		return;
 	digitalWrite(OUTPUT_OFF, HIGH);
 	lcd.setCursor(17, 0);
 	lcd.print("ON ");
@@ -52,6 +54,11 @@ void Controls::loadOnOffToggle(LiquidCrystal_I2C& lcd){
 void Controls::regulateCurrent(float setCurrent){
 	if(isnan(setCurrent))	//e.g. 0W / 0V in constant power mode
 		setCurrent = 0;
+	if(measurements.fault){	//called in every mode's loop, so this switches the load off wherever the fault is detected
+		setCurrent = 0;
+		digitalWrite(OUTPUT_OFF, LOW);
+		loadIsOn = false;
+	}
 	if(setCurrent > MAX_CURRENT)
 		setCurrent = MAX_CURRENT;
 	if(setCurrent * measurements.voltage > MAX_POWER)

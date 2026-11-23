@@ -61,7 +61,7 @@ int Transient::continousMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypa
     measurements.update();
     measurements.displayMeasurements(lcd, controls.isLoadOn());
     controls.fanControll();
-    if(lastTime + pulseTime.value <= millis()){	//toggle current after set time
+    if((uint32_t)(millis() - lastTime) >= (uint32_t)pulseTime.value){//toggle current after set time
       toggleCurrent(controls);
       lastTime = millis();
     }
@@ -184,7 +184,7 @@ int Transient::pulseMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& k
     if(userInput.key == '.' && controls.isLoadOn()){	//pulse current after . is pressed on keypad
       lastTime = millis();
       controls.regulateCurrent(highCurrent.value);
-      while(lastTime + pulseTime.value > millis()){
+      while((uint32_t)(millis() - lastTime) < (uint32_t)pulseTime.value){
         measurements.update();
         measurements.displayMeasurements(lcd, controls.isLoadOn());
         controls.fanControll();

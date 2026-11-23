@@ -27,6 +27,7 @@ SetValue& setpoint(UserInput& userInput){
 	}
 }
 
+#ifndef HEADLESS	//no display in the headless build
 void showHeader(LiquidCrystal_I2C& lcd, Controls& controls){
 	lcd.setCursor(0, 0);
 	lcd.print("PC Remote ");
@@ -58,6 +59,7 @@ void showSetpoint(LiquidCrystal_I2C& lcd, UserInput& userInput){
 			break;
 	}
 }
+#endif
 
 void sendMeasurements(UserInput& userInput, Measurements& measurements, Controls& controls){
 	bool on = controls.isLoadOn();
@@ -99,7 +101,7 @@ bool execute(char* command, LiquidCrystal_I2C& lcd, UserInput& userInput, Measur
 	else if(!strcmp(command, "CR"))
 		newMode = ConstResistance;
 	else if(!strcmp(command, "ON")){
-		if(measurements.voltage > MAX_VOLTAGE + 1){
+		if(measurements.fault){	//sensor failure / over-voltage / over-temperature
 			replyError();
 			return false;
 		}
@@ -197,6 +199,7 @@ int remoteMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Enc
 		Serial.read();
 
 	encoder.reset();
+	uint8_t reportedFault = 0;
 
 	while(1){
 		measurements.update();
@@ -205,14 +208,19 @@ int remoteMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Enc
 #endif
 		controls.fanControll();
 
+		//messages that don't answer a command start with '!' so that a host waiting for "OK"/"ERR" can tell them apart
 		if(encoder.wasButtonPressed() && controls.isLoadOn()){	//physical safety switch
 			controls.loadOff(lcd);
-			Serial.println("OFF");
+			Serial.println("!OFF ENCODER");
 		}
 
-		if(controls.isLoadOn() && measurements.voltage > MAX_VOLTAGE + 1){	//input voltage above the rating
-			controls.loadOff(lcd);
-			replyError();
+		if(measurements.fault != reportedFault){	//report each change of the protection flags once
+			reportedFault = measurements.fault;
+			if(reportedFault){
+				controls.loadOff(lcd);
+				Serial.print("!FAULT ");
+				Serial.println(reportedFault);
+			}
 		}
 
 		switch(mode){

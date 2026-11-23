@@ -32,7 +32,7 @@ void UserInput::inputFromKeypad(LiquidCrystal_I2C& lcd, SetValue& setParameter, 
 		}
 	}
 	
-	else if(key == Delete){
+	else if(key == Delete && index > 0){	//nothing to delete when the input is empty (would write numbers[-1])
 		lcd.setCursor(--x_pos,3);
 		lcd.print(" ");
 		--index;
@@ -77,12 +77,12 @@ void UserInput::checkEncoder(LiquidCrystal_I2C& lcd, SetValue& setParameter, Enc
 			++cursorPosX;
 	}
 
-	if(encoder.rotation()){
-		setParameter.value += encoder.rotation() * pow(10, decimalPlace);
+	int steps = encoder.takeRotation();
+	if(steps){
+		setParameter.value += steps * pow(10, decimalPlace);
 		setParameter.limit();
 		lcd.setCursor(xPositon, yPosition);
 		setParameter.display(lcd);
-		encoder.reset();
 		time = millis();
 	}
 }

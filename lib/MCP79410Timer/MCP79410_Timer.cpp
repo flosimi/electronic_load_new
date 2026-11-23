@@ -77,18 +77,18 @@ String MCP79410_Timer::getTime(){
 
 //Read RTC Byte
 unsigned char MCP79410_Timer::_readRtcByte(const unsigned char adr){
-  unsigned char data;
-  Wire.beginTransmission(0x6f);
+  unsigned char data = 0;
+  Wire.beginTransmission(_rtcAddress);
   Wire.write(adr);
   Wire.endTransmission();
-  Wire.requestFrom(0x6f,1);
+  Wire.requestFrom((int)_rtcAddress, 1);
   while (Wire.available()) data=Wire.read();
   return data;
 }
 
 //Write to RTC
 void MCP79410_Timer::_writeRtcByte(const unsigned char adr, const unsigned char data){
-  Wire.beginTransmission(0x6f);
+  Wire.beginTransmission(_rtcAddress);
   Wire.write(adr);
   Wire.write(data);
   Wire.endTransmission();
@@ -108,7 +108,7 @@ uint8_t MCP79410_Timer::_makeHex(uint8_t num){
 }
 
 unsigned char MCP79410_Timer::_getRtcData(const unsigned char adr, const unsigned char validbits){
-  unsigned char data;
+  unsigned char data = 0;
   data=_readRtcByte(adr);
   data=data & 0xff>>(8-validbits);
   return data;

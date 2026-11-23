@@ -113,7 +113,7 @@ uint32_t calculateCRC(const uint8_t* data, size_t length) {
 void sendLoadStatisticsOverSerial(Measurements& measurements, Battery& battery, bool isLoadOnBool){
 	uint16_t voltage_mV = static_cast<uint16_t>(1000 * measurements.voltage);
 	uint16_t current_mA = static_cast<uint16_t>(1000 * measurements.current);
-	uint16_t temperature = static_cast<uint16_t>(measurements.temperature);
+	uint16_t temperature = static_cast<uint16_t>(measurements.temperature < 0 ? 0 : measurements.temperature);	//the protocol has no sign
 	uint16_t cutoffVoltage_mV = static_cast<uint16_t>(1000 * battery.cutoffVoltage.value);
 	uint16_t dischargeCurrent_mA = static_cast<uint16_t>(1000 * battery.dischargeCurrent.value);
 	uint16_t isLoadOn = static_cast<uint16_t>(isLoadOnBool);
@@ -158,11 +158,98 @@ void sendLoadStatisticsOverSerial(Measurements& measurements, Battery& battery, 
 	Serial.println(crc);
 }
 
+//capacity is integrated step by step (mA * ms -> mAh), so a change of the current only affects the new steps
+static uint32_t capacityLastMs;
+static void accumulateCapacity(Battery& battery, Measurements& measurements, Controls& controls){
+	uint32_t now = millis();
+	if(controls.isLoadOn())
+		battery.capacity += measurements.current * 1000.0f * (now - capacityLastMs) / 3600000.0f;
+	capacityLastMs = now;
+}
+
+#ifdef HEADLESS
+//Non-blocking command parser for the PC application / a terminal (headless build):
+//  o = toggle the load, N = load on, F = load off (idempotent versions of 'o')
+//  a<A>\n = discharge current, c<V>\n = cutoff voltage, r<anything>\n = reset the capacity and the timer
+//A command with a value is applied when the newline arrives; it is dropped if the newline doesn't come within 1 s.
+static void pollBatterySerial(LiquidCrystal_I2C& lcd, UserInput& userInput, Measurements& measurements, Controls& controls, Battery& battery){
+	static char pending = 0;
+	static char number[12];
+	static uint8_t length = 0;
+	static uint32_t lastByteMs = 0;
+
+	while(Serial.available() > 0){
+		char c = Serial.read();
+		lastByteMs = millis();
+
+		if(pending){
+			if(c != '\n'){
+				if(c != '\r' && length < sizeof(number) - 1)
+					number[length++] = c;
+				continue;
+			}
+			number[length] = '\0';
+			bool validNumber = isdigit(number[0]) || number[0] == '.';
+			if(pending == 'a' && validNumber){
+				userInput.setCurrent.value = atof(number);
+				userInput.setCurrent.limit();
+				battery.dischargeCurrent.value = userInput.setCurrent.value;
+				controls.regulateCurrent(battery.dischargeCurrent.value);
+			}
+			else if(pending == 'c' && validNumber){
+				battery.cutoffVoltage.value = atof(number);
+				battery.cutoffVoltage.limit();
+			}
+			else if(pending == 'r'){
+				measurements.timer.stop();
+				measurements.timer.reset();
+				battery.capacity = 0;
+				if(controls.isLoadOn())
+					measurements.timer.start();
+			}
+			pending = 0;
+			continue;
+		}
+
+		switch(c){
+			case 'o':
+				controls.loadOnOffToggle(lcd);
+				break;
+			case 'N':
+				if(!controls.isLoadOn())
+					controls.loadOn(lcd);
+				break;
+			case 'F':
+				controls.loadOff(lcd);
+				break;
+			case 'a':
+			case 'c':
+			case 'r':
+				pending = c;
+				length = 0;
+				continue;
+			default:
+				continue;
+		}
+		if(controls.isLoadOn())
+			measurements.timer.start();
+		else
+			measurements.timer.stop();
+	}
+
+	if(pending && millis() - lastByteMs > 1000)	//incomplete command
+		pending = 0;
+}
+#endif
+
 int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Encoder& encoder, Measurements& measurements, Controls& controls, Battery& battery){
-	float prevSetCurrent = battery.dischargeCurrent.value;
-	float prevCapacity = 0;
-	uint32_t prevTime = 0;
+#ifndef HEADLESS
 	char data;
+#else
+	uint32_t lastSendMs = 0;
+	uint8_t reportedFault = 0;
+#endif
+	capacityLastMs = millis();
 	userInput.cursorPosX = 3;
 	userInput.decimalPlace = ones;
 	battery.changedVariable = DischargeCurrent;
@@ -194,6 +281,9 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 	controls.regulateCurrent(battery.dischargeCurrent.value);
 
 	while(1){
+#ifdef HEADLESS
+		pollBatterySerial(lcd, userInput, measurements, controls, battery);
+#else
 		if(Serial.available()>0){
 			data = Serial.read();
     	if(data == 'o')
@@ -210,12 +300,6 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 				controls.regulateCurrent(userInput.setCurrent.value);
 				lcd.setCursor(2, 2);
 				battery.dischargeCurrent.display(lcd);
-
-				if(prevSetCurrent != battery.dischargeCurrent.value){	//if changed discharge current
-					prevCapacity = battery.capacity;
-					prevTime = measurements.timer.getTotalSeconds();
-					prevSetCurrent = battery.dischargeCurrent.value;
-				}
 			}
 			if(data == 'c'){
 				battery.cutoffVoltage.value = Serial.parseFloat();
@@ -227,35 +311,46 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 				measurements.timer.stop();
 				measurements.timer.reset();
 				battery.capacity = 0;
-				prevCapacity = 0;
-				prevTime = 0;
 				if(controls.isLoadOn())
 					measurements.timer.start();
 			}
 		}
+#endif
 
 		measurements.update();
 
 #ifdef HEADLESS
-		//no keypad / LCD: safety switches and continuous regulation (so that MAX_POWER follows the input voltage)
-		if((encoder.wasButtonPressed() || measurements.voltage > MAX_VOLTAGE + 1) && controls.isLoadOn()){
+		//no keypad / LCD: safety switch, continuous regulation (so that MAX_POWER follows the input voltage and a fault switches the load off)
+		if(encoder.wasButtonPressed() && controls.isLoadOn())
 			controls.loadOff(lcd);
-			measurements.timer.stop();
-		}
 		controls.regulateCurrent(battery.dischargeCurrent.value);
-#endif
+		if(measurements.fault != reportedFault){	//the application ignores lines that are not "m;..." telemetry
+			reportedFault = measurements.fault;
+			if(reportedFault){
+				Serial.print("!FAULT ");
+				Serial.println(reportedFault);
+			}
+		}
+		if(!controls.isLoadOn() && measurements.timer.status() == 1)	//load switched off (encoder, fault): stop the timer
+			measurements.timer.stop();
 
+		if(millis() - lastSendMs >= 200){		//telemetry at 5 Hz, not as fast as the UART allows
+			lastSendMs = millis();
+			sendLoadStatisticsOverSerial(measurements, battery, controls.isLoadOn());
+		}
+		controls.fanControll();
+		accumulateCapacity(battery, measurements, controls);
+#else
 		sendLoadStatisticsOverSerial(measurements, battery, controls.isLoadOn());
 
 		measurements.displayMeasurements(lcd, controls.isLoadOn());
 		controls.fanControll();
 		lcd.setCursor(7, 3);
 		lcd.print(measurements.timer.getTime());
-		if (controls.isLoadOn()){
-      battery.capacity = prevCapacity + (measurements.current * 1000) * ((measurements.timer.getTotalSeconds() - prevTime) / 3600.0);
-    }
+		accumulateCapacity(battery, measurements, controls);
 		battery.displayCapacity(lcd);
-		if(measurements.voltage < battery.cutoffVoltage.value){
+#endif
+		if(controls.isLoadOn() && measurements.voltage < battery.cutoffVoltage.value){
 			controls.loadOff(lcd);
 			measurements.timer.stop();
 		}
@@ -277,8 +372,6 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 				measurements.timer.stop();
 				measurements.timer.reset();
 				battery.capacity = 0;
-				prevCapacity = 0;
-				prevTime = 0;
 				if(controls.isLoadOn())
 					measurements.timer.start();
 				break;
@@ -294,11 +387,9 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 					controls.fanControll();
 					lcd.setCursor(7, 3);
 					lcd.print(measurements.timer.getTime());
-					if (controls.isLoadOn()){
-						battery.capacity = prevCapacity + (measurements.current * 1000) * ((measurements.timer.getTotalSeconds() - prevTime) / 3600.0);
-					}
+					accumulateCapacity(battery, measurements, controls);
 					battery.displayCapacity(lcd);
-					if(measurements.voltage < battery.cutoffVoltage.value){
+					if(controls.isLoadOn() && measurements.voltage < battery.cutoffVoltage.value){
 						controls.loadOff(lcd);
 						measurements.timer.stop();
 					}
@@ -330,12 +421,6 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 							userInput.inputFromKeypad(lcd, battery.cutoffVoltage, 14, 2);
 							userInput.checkEncoder(lcd, battery.cutoffVoltage, encoder, 14, 2);
 							break;
-					}
-
-					if(prevSetCurrent != battery.dischargeCurrent.value){	//if changed discharge current
-						prevCapacity = battery.capacity;
-						prevTime = measurements.timer.getTotalSeconds();
-						prevSetCurrent = battery.dischargeCurrent.value;
 					}
 
 					if(userInput.key == '#'){	//toggle changed variable between dischargeCurrent and cutoffVoltage

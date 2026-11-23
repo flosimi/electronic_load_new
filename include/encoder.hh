@@ -21,6 +21,7 @@ class Encoder{
     void reset();
     bool wasButtonPressed();
     int rotation();
+    int takeRotation();
 };
 
 #endif
