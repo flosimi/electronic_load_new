@@ -1,0 +1,7 @@
+<map id="measurements.h" name="measurements.h">
+<area shape="rect" id="node1" title="Declaration of the Measurements class and the Reading struct for storing and managing measurement dat..." alt="" coords="195,5,327,32"/>
+<area shape="rect" id="node2" href="$electronic__load__app_8h.html" title=" " alt="" coords="90,80,254,107"/>
+<area shape="rect" id="node5" href="$measurements_8cpp.html" title="Implementation of the Measurements class methods for storing and managing measurement data." alt="" coords="279,80,425,107"/>
+<area shape="rect" id="node3" href="$electronic__load__app_8cpp.html" title=" " alt="" coords="5,155,184,181"/>
+<area shape="rect" id="node4" href="$main_8cpp.html" title=" " alt="" coords="208,155,291,181"/>
+</map>
