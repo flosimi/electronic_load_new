@@ -13,11 +13,17 @@ int limit(int& value){
 }
 
 
+//blank EEPROM reads 255 - use the neutral value instead
+static int readOr(int address, int neutral){
+  int v = EEPROM.read(address);
+  return v == 255 ? neutral : v;
+}
+
 void AdcCalibration::readFromEEPROM(){
-  voltageMultiplier = EEPROM.read(EEPROM_ADDRESS_ADC_U_MULTIPLIER_CAL);
-  voltageOffset = EEPROM.read(EEPROM_ADDRESS_ADC_U_OFFSET_CAL);
-  currentMultiplier = EEPROM.read(EEPROM_ADDRESS_ADC_I_MULTIPLIER_CAL);
-  currentOffset = EEPROM.read(EEPROM_ADDRESS_ADC_I_OFFSET_CAL);
+  voltageMultiplier = readOr(EEPROM_ADDRESS_ADC_U_MULTIPLIER_CAL, 128);
+  voltageOffset = readOr(EEPROM_ADDRESS_ADC_U_OFFSET_CAL, 128);
+  currentMultiplier = readOr(EEPROM_ADDRESS_ADC_I_MULTIPLIER_CAL, 128);
+  currentOffset = readOr(EEPROM_ADDRESS_ADC_I_OFFSET_CAL, 0);
 }
 
 void AdcCalibration::writeToEEPROM(){
@@ -47,8 +53,8 @@ void AdcCalibration::setCurrentOffset(int cal){
 
 
 void DacCalibration::readFromEEPROM(){
-  setCurrentMultiplier = EEPROM.read(EEPROM_ADDRESS_DAC_MULTIPLIER_CAL);
-  setCurrentOffset = EEPROM.read(EEPROM_ADDRESS_DAC_OFFSET_CAL);
+  setCurrentMultiplier = readOr(EEPROM_ADDRESS_DAC_MULTIPLIER_CAL, 128);
+  setCurrentOffset = readOr(EEPROM_ADDRESS_DAC_OFFSET_CAL, 128);
 }
 
 

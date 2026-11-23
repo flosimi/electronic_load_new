@@ -10,7 +10,7 @@ void displayWelcomeScreen(LiquidCrystal_I2C& lcd){
   lcd.setCursor(8, 2);
   lcd.print("2022");
   lcd.setCursor(4, 3);
-  lcd.print("50A 35V 1750W");
+  lcd.print("8A 50V 400W");
 }
 
 void displayMenu(LiquidCrystal_I2C& lcd){
@@ -354,10 +354,20 @@ int batteryCapacityMode(LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& ke
 }
 
 
+//redraw the measurements only every DISPLAY_REFRESH_MS: the LCD is slow (I2C) and would delay the keypad polling
+#define DISPLAY_REFRESH_MS 250
+static void refreshDisplay(LiquidCrystal_I2C& lcd, Measurements& measurements, Controls& controls, bool force = false){
+	static unsigned long lastRefresh = 0;
+	if(force || millis() - lastRefresh >= DISPLAY_REFRESH_MS){
+		measurements.displayMeasurements(lcd, controls.isLoadOn());
+		lastRefresh = millis();
+	}
+}
+
 int taskLoop(ModeOfOperation mode, SetValue& setParameter, LiquidCrystal_I2C& lcd, UserInput& userInput, Keypad& keypad, Encoder& encoder, Measurements& measurements, Controls& controls){
 	while(1){
 		measurements.update();
-		measurements.displayMeasurements(lcd, controls.isLoadOn());
+		refreshDisplay(lcd, measurements, controls);
 		controls.fanControll();
 		loadControl(controls, userInput, mode);
 		switch (keypad.getKey()){
@@ -367,27 +377,29 @@ int taskLoop(ModeOfOperation mode, SetValue& setParameter, LiquidCrystal_I2C& lc
 				return 0; //exit this loop, go back to menu
 			case LoadOnOff:
 				controls.loadOnOffToggle(lcd);
+				refreshDisplay(lcd, measurements, controls, true);
 				break;
 			case Enter:
 				encoder.reset();
 				userInput.time = millis();
 				while(userInput.time + 5000 > millis()){  //exit after 5s of inactivity
 					measurements.update();
-					measurements.displayMeasurements(lcd, controls.isLoadOn());
+					refreshDisplay(lcd, measurements, controls);
 					controls.fanControll();
 					loadControl(controls, userInput, mode);
 
 					userInput.key = keypad.getKey();
 					lcd.cursor();
 					lcd.setCursor(userInput.cursorPosX,2);
-					delay(100);
 					if(userInput.key == Menu){
 						controls.loadOff(lcd);
 						userInput.resetKeypadInput();
 						return 0; //exit this loop, go back to menu
 					}
-					else if(userInput.key == LoadOnOff)
+					else if(userInput.key == LoadOnOff){
 						controls.loadOnOffToggle(lcd);
+						refreshDisplay(lcd, measurements, controls, true);
+					}
 
 					userInput.inputFromKeypad(lcd, setParameter, 6, 2);
 					userInput.checkEncoder(lcd, setParameter, encoder, 6, 2);

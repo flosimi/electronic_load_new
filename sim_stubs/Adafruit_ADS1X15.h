@@ -12,12 +12,15 @@
 #define SIM_INPUT_VOLTAGE 24.0
 #endif
 
+#define RATE_ADS1115_860SPS (0x00E0)
+
 typedef enum { GAIN_TWOTHIRDS, GAIN_ONE, GAIN_TWO, GAIN_FOUR, GAIN_EIGHT, GAIN_SIXTEEN } adsGain_t;
 
 class Adafruit_ADS1115 {
   public:
     bool begin(uint8_t){ return true; }
     void setGain(adsGain_t){}
+    void setDataRate(uint16_t){}
     int16_t readADC_Differential_2_3(){
       return (int16_t)(SIM_INPUT_VOLTAGE / 100.0 / 0.512 * 32768.0);
     }

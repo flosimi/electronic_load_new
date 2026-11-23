@@ -3,6 +3,7 @@
 
 Measurements::Measurements(){
   adc.begin(ADC_ADDRESS);
+  adc.setDataRate(RATE_ADS1115_860SPS);
   calibration.readFromEEPROM();
 }
 

@@ -2,16 +2,15 @@
 #ifndef DEFINES_HH
 #define DEFINES_HH
 
-#define MAX_CURRENT 50
-#define MAX_POWER 1750
-#define MAX_VOLTAGE 35
+#define MAX_CURRENT 8.4
+#define MAX_POWER 400
+#define MAX_VOLTAGE 50
 #define MAX_RESISTANCE 9999.9
 
 //////////////////////////////////////////////////////////////////////////////
-// CURRENT PATH HARDWARE - SET THESE TO MATCH YOUR BUILD BEFORE FLASHING!
-// The values below are PLACEHOLDERS (0.004 ohm total shunt resistance).
+// CURRENT PATH HARDWARE (8 A main board: 8 x 0.2 ohm shunts, 4 parallel branches)
 //////////////////////////////////////////////////////////////////////////////
-#define CURRENT_SHUNT_OHM 0.004       //equivalent resistance of all shunts in parallel [ohm]
+#define CURRENT_SHUNT_OHM 0.025       //equivalent resistance of all shunts in parallel [ohm]
 #define ADC_CURRENT_FULL_SCALE 0.256  //ADS1115 range used for the shunt voltage (GAIN_SIXTEEN = +/-0.256V)
 #define DAC_VREF 4.096                //MCP4725 reference voltage [V]
 #define DAC_ATTENUATION 0.053         //divider between DAC output and the regulation loop (0.053 in the original design)
@@ -59,6 +58,6 @@ static_assert(MAX_CURRENT * DAC_VOLTS_PER_AMP < DAC_VREF, "DAC can't reach MAX_C
 
 #define FAN 5
 #define OUTPUT_OFF 4
-#define IN_TRIGGER 3
+#define IN_TRIGGER A7   //analog-only pin (ADC7)
 
 #endif

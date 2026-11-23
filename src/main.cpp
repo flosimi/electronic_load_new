@@ -33,6 +33,7 @@ int main(void){
   Transient transient;
 
   lcd.init();
+  Wire.setClock(400000);        //after lcd.init(): repeated Wire.begin() resets the bus speed
   lcd.backlight();              //turn the backlight on
   lcd.createChar(degree, degreeSymbol);
   lcd.createChar(ohm, ohmSymbol);
